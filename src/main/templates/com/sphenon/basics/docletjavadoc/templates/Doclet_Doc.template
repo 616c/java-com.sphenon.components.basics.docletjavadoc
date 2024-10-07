@@ -1,0 +1,193 @@
+G-2.0-plain_java-1.0 -*- coding: utf-8; -*-
+⊏ signature(Doc doc) ⊐⊏ polymorphic ⊐…
+▼ import com.sun.javadoc.*; ▼…
+▼ import com.sphenon.basics.expression.RegularExpression; ▼…
+▼ import java.util.Hashtable; ▼…
+▼ import java.util.List; ▼…
+▼ import java.util.ArrayList; ▼…
+« if (doc.position() != null) { »…
+  <!-- ◂doc.position().toString().replaceFirst(".*/","")▸ -->
+« } »…
+⊏ template Details() ⊐…
+  ⋮⊰ insert this.Doclet(doc.firstSentenceTags(),"???",null,null) ⊱…
+  ⋮« List<Entry> entries = organiseTags(doc); »…
+  ⋮« for (Entry entry : entries) { »…
+    ⋮⊏ insert this.Doclet(entry) ⊐…
+  ⋮« } »…
+⊏ end template ⊐…
+⊰ ------------------------------- ⊱…
+⊏ insert this.Details() ⊐…
+⊰
+ Tag[]   firstSentenceTags()
+ Tag[]   inlineTags()
+ boolean isIncluded()
+ SourcePosition 
+ SeeTag[] seeTags()
+ Tag[]    tags()
+⊱
+⊰ ------------------------------------------------------------------------------------ ⊱…
+⊏ template Doclet(Entry entry) ⊐…
+«   Hashtable<String,String> meta = getMetaData(entry.inline_tags, entry.main_tag == null ? "Summary" : "Reference");
+    String category = meta.get("category");
+    String xml_atts = getXMLAttributes(meta);
+    boolean empty = (entry.sub_tags == null || entry.sub_tags.size() == 0 ? true : false);
+    if (empty) {
+      for (Tag tag : entry.inline_tags) {
+        if (tag.text().matches("[\n\r\t\f ]*") == false) { empty = false; break; }
+      }
+    }
+    if ( ! empty) {
+»…
+  <docl:◂category▸◂xml_atts▸>…
+    ⋮« if (entry.main_tag != null && entry.main_tag instanceof ParamTag) { »…
+      ⋮<code>◂((ParamTag)entry.main_tag).parameterName()▸</code> : …
+    ⋮« } »…
+    ⋮« { StringBuilder text = new StringBuilder();
+         for (Tag tag : entry.inline_tags) {
+           if (tag.name().matches(DOCLET_TAG) == false) {
+             text.append(tag.text());
+           }
+         }
+         »◂adjustIndentation(text.toString())▸«
+       }
+       if (entry.sub_tags != null && entry.sub_tags.size() != 0) { »…
+         ⋮    <table role="properties"><tgroup cols="3"><tbody>
+         ⋮«
+         for (Tag sub_tag : entry.sub_tags) {
+             String name = sub_tag.name();
+             StringBuilder text = new StringBuilder();
+             String item = "";
+             if (name != null) {
+                 if (name.length() == 0) {
+                     name = null;
+                 } else {
+                     if (name.charAt(0) == '@') { name = name.substring(1); }
+                     if (name.equals("param"))         { name = "Parameter"; }
+                     if (name.equals("return"))        { name = "Returns"; }
+                     if (name.equals("configuration")) { name = "Configuration"; }
+                 }
+             }
+             boolean first = true;
+             for (Tag sub_inline_tag : sub_tag.inlineTags()) {
+                 if (sub_inline_tag.name().matches(DOCLET_TAG) == false) {
+                     String tt = sub_inline_tag.text();
+                     if (first && name != null && name.matches("^(?:Parameter|Configuration)$")) {
+                         String[] p = first_item.tryGetMatches(context, tt);
+                         item = p[1];
+                         tt = p[0] + p[2];
+                     }
+                     text.append(tt);
+                     first = false;
+                 }
+             }
+             »    <row><entry role="type">«if(name!=null){»◂name▸«}»</entry><entry role="item">◂item▸</entry><entry role="text">◂adjustIndentation(text.toString())▸</entry></row>
+           ⋮«
+         }
+           »    </tbody></tgroup></table>
+         ⋮«
+       }
+     »</docl:◂category▸>
+«   }
+»…
+⊏ end template ⊐…
+⊰ ------------------------------------------------------------------------------------ ⊱…
+▲
+    static protected String DOCLET_TAG = "@(?i:Category|SecurityClass|Language|Audience|Maturity|Intent|Extent|Coverage|Form|Layout|Style|Encoding|Aspect|EntitySecurityClass|EntityAudience)";
+
+    static protected RegularExpression first_item = new RegularExpression("(?s:(\\s*)?(\\S+)?(\\s.*)?)");
+
+    static protected class Entry {
+        Tag       main_tag;
+        Tag[]     inline_tags;
+        List<Tag> sub_tags;
+    }
+
+    protected List<Entry> organiseTags(Doc doc) {
+        List<Entry> result = new ArrayList<Entry>();
+        Entry entry = new Entry();
+        result.add(entry);
+        entry.main_tag    = null;
+        entry.inline_tags = doc.inlineTags();
+        for (Tag tag : doc.tags()) {
+            String name = tag.name();
+            if (name != null) {
+                if (name.matches("(?:@ignore)")) {
+                    // ignore
+                } else if (name.matches("(?:@doclet)|(?:@worklet)")) {
+                    entry = new Entry();
+                    result.add(entry);
+                    entry.main_tag    = tag;
+                    entry.inline_tags = tag.inlineTags();
+                } else {
+                    if (entry.sub_tags == null) {
+                        entry.sub_tags = new ArrayList<Tag>();
+                    }
+                    entry.sub_tags.add(tag);
+                }
+            }
+        }
+        return result;
+    }
+
+    protected Hashtable<String,String> getMetaData(Tag[] tags, String default_category) {
+        Hashtable<String,String> result = new Hashtable<String,String>();
+        result.put("securityclass", "Sphenon");
+        result.put("audience", "Development");
+        result.put("category", default_category);
+        for (Tag tag : tags) {
+            if (tag.name().matches(DOCLET_TAG)) {
+                String id = tag.name().toLowerCase().substring(1);
+                result.put(id, tag.text());
+            }
+        }
+        return result;
+    }
+
+    protected String adjustIndentation(String text) {
+        text = text.replaceFirst("^([ \\n]*\\n)", "").replaceFirst("([ \\n]*)$", "");
+        java.text.CharacterIterator iter = new java.text.StringCharacterIterator(text);
+        StringBuilder sb = new StringBuilder();
+        for (char c = iter.first(); c != java.text.CharacterIterator.DONE && c == ' '; c = iter.next()) {
+            sb.append(c);
+        }
+        text = text.replaceAll("(^|\\n)" + sb.toString(), "$1");
+        return text;
+    }
+
+    protected void addXMLAttribute(Hashtable<String,String> meta, StringBuffer sb, String id, String mcname) {
+        String text = meta.get(id);
+        if (text != null) {
+            sb.append(" ");
+            if (mcname.equals("Language")) {
+                sb.append("xml:lang");
+            } else {
+                sb.append(mcname);
+            }
+            sb.append("=\"");
+            sb.append(text); //Encoding.recode ... Encoding.XMLA(ttribute)
+            sb.append("\"");
+        }
+    }
+
+    protected String getXMLAttributes(Hashtable<String,String> meta) {
+        StringBuffer sb = new StringBuffer();
+        addXMLAttribute(meta, sb, "securityclass", "SecurityClass");
+        addXMLAttribute(meta, sb, "language", "Language");
+        addXMLAttribute(meta, sb, "audience", "Audience");
+        addXMLAttribute(meta, sb, "maturity", "Maturity");
+        addXMLAttribute(meta, sb, "intent", "Intent");
+        addXMLAttribute(meta, sb, "extent", "Extent");
+        addXMLAttribute(meta, sb, "coverage", "Coverage");
+        addXMLAttribute(meta, sb, "form", "Form");
+        addXMLAttribute(meta, sb, "encoding", "Encoding");
+        addXMLAttribute(meta, sb, "aspect", "Aspect");
+        return sb.toString();
+    }
+
+    protected String getXMLAttributes4Entity(Hashtable<String,String> meta) {
+        StringBuffer sb = new StringBuffer();
+        addXMLAttribute(meta, sb, "entitysecurityclass", "SecurityClass");
+        addXMLAttribute(meta, sb, "entityaudience", "Audience");
+        return sb.toString();
+    }
+▲…
